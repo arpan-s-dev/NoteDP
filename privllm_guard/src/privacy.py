@@ -164,3 +164,193 @@ class RDPAccountant:
     def reset(self) -> None:
         self.rdp_budgets = {alpha: 0.0 for alpha in self.orders}
 
+
+class PrivacyBudgetTracker:
+    """§IV.D Eqs. 18–19 — running ε and sliding-window spike detector.
+
+    Eq. 18: ε_remaining(t) = ε_initial − Σ_{i=1}^t ε_i
+    Eq. 19: ε_window(t) = Σ_{i=max(1,t−w)}^t ε_i   with w = 50
+    Spike: ε_window > 0.15 · ε_total  (§IV.D)
+    """
+
+    def __init__(self, total_budget: float, window_size: int = 50) -> None:
+        self.total_budget = total_budget
+        self.window_size = window_size
+        self.consumed = 0.0
+        self.step_costs: list[float] = []
+
+    def consume(self, cost: float) -> None:
+        self.consumed += cost
+        self.step_costs.append(cost)
+
+    @property
+    def remaining(self) -> float:
+        return max(0.0, self.total_budget - self.consumed)
+
+    @property
+    def window_cost(self) -> float:
+        recent = self.step_costs[-self.window_size :]
+        return float(sum(recent))
+
+    def is_budget_exceeded(self) -> bool:
+        return self.remaining <= 0.0
+
+    def is_window_spike(self, threshold_fraction: float = 0.15) -> bool:
+        return self.window_cost > threshold_fraction * self.total_budget
+
+    def reset(self) -> None:
+        self.consumed = 0.0
+        self.step_costs = []
+
+
+@dataclass
+class NoiseParameters:
+    """Cached per-sequence noise scales from Adaptive Noise Calibration (§III)."""
+
+    sigma_emb: float
+    sigma_att: float
+    profile: str  # "high" | "medium" | "low"
+
+
+class AdaptiveNoiseCalibrator:
+    """§III Algorithm 1 prose — ANC runs once per sequence, not per token.
+
+    A single sensitivity profile (high/medium/low) selects (σ_emb, σ_att)
+    which are cached for the full generation. This is O(κ) with κ ≈ 512,
+    not O(n·κ) per token.
+
+    [UNSPECIFIED] The paper never states the numeric mapping from profile
+    to σ. Using multipliers on Appendix A base σ_emb=0.5, σ_att=0.3.
+    Alternatives: learned RL policy (Eq. 10 prose, algorithm unspecified).
+    """
+
+    def __init__(
+        self,
+        sigma_emb: float,
+        sigma_att: float,
+        multipliers: dict[str, float] | None = None,
+    ) -> None:
+        self.base_sigma_emb = sigma_emb
+        self.base_sigma_att = sigma_att
+        self.multipliers = multipliers or {"high": 1.5, "medium": 1.0, "low": 0.5}
+
+    def from_profile(self, profile: str) -> NoiseParameters:
+        scale = self.multipliers[profile]
+        return NoiseParameters(
+            sigma_emb=self.base_sigma_emb * scale,
+            sigma_att=self.base_sigma_att * scale,
+            profile=profile,
+        )
+
+    def from_probs(self, profile_probs: torch.Tensor) -> NoiseParameters:
+        """profile_probs: (3,) or (batch, 3) softmax over [low, medium, high]."""
+        if profile_probs.dim() == 2:
+            profile_probs = profile_probs.mean(dim=0)
+        idx = int(torch.argmax(profile_probs).item())
+        names = ("low", "medium", "high")
+        return self.from_profile(names[idx])
+
+    def emergency_recalibrate(self, current: NoiseParameters) -> NoiseParameters:
+        """§III — if the monitor flags a violation, increase noise (stricter).
+
+        [UNSPECIFIED] Recalibration rule not given. Using: bump one profile
+        level toward 'high' (more noise).
+        """
+        order = ("low", "medium", "high")
+        idx = min(order.index(current.profile) + 1, len(order) - 1)
+        return self.from_profile(order[idx])
+
+
+def hierarchical_layer_sigmas(
+    base_sigma_att: float,
+    n_layers: int,
+) -> list[float]:
+    """§III — 'varied layers possess varying privacy budgets'.
+
+    [PARTIALLY_SPECIFIED] No per-layer schedule is given. Using linearly
+    *decreasing* attention noise with depth so later layers (more abstract
+    clinical concepts) keep more utility, matching the hierarchical story
+    in §V Performance drivers. Alternatives: uniform σ (official code).
+    """
+    if n_layers <= 1:
+        return [base_sigma_att]
+    scales = torch.linspace(1.15, 0.85, n_layers)
+    return [base_sigma_att * float(s) for s in scales]
+
+
+def exponential_mechanism_sample(
+    utilities: torch.Tensor,
+    epsilon_t: float,
+    delta_u: float,
+) -> torch.Tensor:
+    """§IV.B, Eq. 7 — private token sampling.
+
+    P(w_t | w_<t) ∝ exp( ε_t · u(w_t, w_<t) / (2 Δu) )
+
+    Args:
+        utilities: (..., vocab) utility scores. We use LM logits as u(·).
+        epsilon_t: per-token privacy budget ε_t
+        delta_u: sensitivity of u. Appendix A: 'empirically tuned per task'.
+
+    Returns:
+        sampled token ids, shape (...,)
+    """
+    # [UNSPECIFIED] Paper does not say u is logits. Using logits as utility.
+    # Alternatives: log-softmax; clipped logits.
+    scale = epsilon_t / (2.0 * max(delta_u, 1e-8))
+    log_probs = utilities * scale  # (..., vocab)
+    probs = F.softmax(log_probs, dim=-1)
+    flat = probs.reshape(-1, probs.size(-1))
+    idx = torch.multinomial(flat, num_samples=1).squeeze(-1)
+    return idx.reshape(utilities.shape[:-1])
+
+
+class RealTimePrivacyMonitor:
+    """§IV.D — per-token O(w) accumulator plus risk score R(y) (Eq. 14).
+
+    Eq. 14: R(y) = Σ_i w_i · P(leak_i | y_{≤i})
+    The monitor does not run the heavy ANC; it only accumulates budget and
+    risk. Emergency recalibration is triggered on budget exhaustion or a
+    window spike (§III: <2.3% of sequences in the paper).
+    """
+
+    def __init__(
+        self,
+        tracker: PrivacyBudgetTracker,
+        spike_fraction: float = 0.15,
+        risk_threshold: float = 0.5,
+    ) -> None:
+        # [UNSPECIFIED] R(y) halt threshold is 'a predefined threshold'.
+        # Using 0.5 on the mean token leak probability scale.
+        self.tracker = tracker
+        self.spike_fraction = spike_fraction
+        self.risk_threshold = risk_threshold
+
+    def risk_score(
+        self,
+        leak_probs: torch.Tensor,
+        token_weights: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Eq. 14.
+
+        Args:
+            leak_probs: P(leak_i | y_{≤i}) — (batch, seq_len)
+            token_weights: w_i — (batch, seq_len) or (seq_len,)
+
+        Returns:
+            R(y) per sequence — (batch,)
+        """
+        if token_weights is None:
+            token_weights = torch.ones_like(leak_probs)
+        if token_weights.dim() == 1:
+            token_weights = token_weights.unsqueeze(0).expand_as(leak_probs)
+        return (token_weights * leak_probs).sum(dim=-1)  # (batch,)
+
+    def should_recalibrate(self, sequence_risk: torch.Tensor | None = None) -> bool:
+        if self.tracker.is_budget_exceeded():
+            return True
+        if self.tracker.is_window_spike(self.spike_fraction):
+            return True
+        if sequence_risk is not None and bool((sequence_risk > self.risk_threshold).any()):
+            return True
+        return False
