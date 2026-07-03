@@ -1,0 +1,81 @@
+# Configuration for PrivLLM-Guard
+# Paper: https://doi.org/10.1038/s41598-026-45883-6
+# Alghamdi, Sci Rep 16:15781 (2026)
+# All values cited to a paper section or flagged [UNSPECIFIED] / [FROM_OFFICIAL_CODE]
+
+model:
+  d_model: 768          # §V complexity analysis — "d = 768"
+  n_heads: 12           # [FROM_OFFICIAL_CODE] pllm.py PLLMConfig; paper unspecified
+  n_layers: 12          # §V — "L = 12"
+  n_decoder_layers: 12  # [UNSPECIFIED] decoder depth; using same L as encoder
+  d_ff: 3072            # [FROM_OFFICIAL_CODE] 4 * d_model BERT/ClinicalBERT convention
+  vocab_size: 30522     # [FROM_OFFICIAL_CODE] BERT WordPiece size
+  max_seq_len: 512      # Appendix A — "Max sequence length 512 tokens"
+  dropout: 0.1          # [FROM_OFFICIAL_CODE] paper does not state dropout
+  activation: "gelu"    # [FROM_OFFICIAL_CODE] FFN activation unspecified in paper
+  norm_eps: 1.0e-5      # [UNSPECIFIED] LayerNorm epsilon; PyTorch default
+  pad_token_id: 0       # [UNSPECIFIED] padding id for skeleton tokenizer
+  tie_embeddings: false # [FROM_OFFICIAL_CODE] LM head not tied
+
+privacy:
+  epsilon_total: 0.1    # Appendix A / §V — ε = 0.1 default
+  delta: 1.0e-6         # Appendix A — δ = 10^{-6}
+  # §V experimental split of Eq. 9 (NOT official code 0.04/0.03/0.02/0.01)
+  epsilon_enc: 0.025    # §V — ε_enc = 0.025
+  epsilon_dec: 0.035    # §V — ε_dec = 0.035
+  epsilon_att: 0.020    # §V — ε_att = 0.020
+  epsilon_out: 0.020    # §V — ε_out = 0.020
+  sigma_emb: 0.5        # Appendix A — embedding noise σ_emb
+  sigma_att: 0.3        # Appendix A — attention noise σ_att
+  clip_C: 1.2           # Appendix A — initial clipping bound C
+  clip_quantile_p: 0.5  # Appendix A / Eq. 11 — p = 0.5 (median)
+  clip_momentum: 0.9    # Appendix A — α_C = 0.9
+  window_size: 50       # Appendix A / Eq. 19 — w = 50
+  window_spike_fraction: 0.15  # §IV.D — 15% of ε_total
+  rdp_orders: [2, 4, 8, 16, 32, 64]  # §IV.D
+  # [UNSPECIFIED] ANC high/medium/low → σ multipliers (paper gives no mapping)
+  anc_sigma_multipliers:
+    high: 1.5
+    medium: 1.0
+    low: 0.5
+  exponential_delta_u: 1.0  # Appendix A — Δu "empirically tuned per task"
+  beam_width: 5         # Appendix A — privacy-aware beam width
+
+training:
+  optimizer: "adamw"    # Appendix A
+  lr: 3.0e-5            # Appendix A — 3 × 10^{-5}
+  betas: [0.9, 0.999]   # [UNSPECIFIED] AdamW β; PyTorch defaults
+  eps: 1.0e-8           # [UNSPECIFIED] AdamW ε
+  weight_decay: 0.01    # [FROM_OFFICIAL_CODE]
+  batch_size: 16        # Appendix A
+  epochs: 10            # Appendix A — 5–10 early-stopped; using max 10
+  early_stop_patience: 2  # [UNSPECIFIED] early-stop rule
+  lambda_privacy: 1.0   # Appendix A — λ1
+  lambda_utility: 1.0   # Appendix A — λ2
+  lambda_medical: 0.5   # Appendix A — λ3
+  distill_temperature: 2.0  # Appendix A
+  seed: 42              # [UNSPECIFIED] paper uses 5 seeds, none named
+
+data:
+  window_size: 512      # §V
+  window_overlap: 128   # §V — 128-token overlap
+  train_fraction: 0.70  # §V
+  val_fraction: 0.15    # §V
+  test_fraction: 0.15   # §V
+  n_entity_types: 7     # [FROM_OFFICIAL_CODE] entity head; paper reports NER accuracy
+  specialties:
+    - cardiology
+    - oncology
+    - neurology
+    - emergency_medicine
+    - internal_medicine
+    - radiology
+    - pathology
+
+evaluation:
+  # §V Privacy Score weights (expert consultation in paper)
+  w_mir: 0.30
+  w_air: 0.25
+  w_mes: 0.25
+  w_dls: 0.20
+  epsilon_sweep: [0.01, 0.05, 0.1, 0.2, 0.5, 1.0]  # §V
