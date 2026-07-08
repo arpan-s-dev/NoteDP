@@ -143,3 +143,72 @@ class PrivacyAwareEmbedding(nn.Module):
         return self.dropout(self.layer_norm(e))  # (batch, seq_len, d_model)
 
 
+class PrivacyAwareAttention(nn.Module):
+    """§IV.A, Eq. 4 — Attention(Q,K,V) = softmax( (QK^T + N_att) / √d_k ) V
+
+    "We modify the standard attention mechanism to incorporate privacy noise,
+    ensuring that attention weights … do not leak confidential information."
+    """
+
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__()
+        if config.d_model % config.n_heads != 0:
+            raise ValueError("d_model must be divisible by n_heads")
+        self.n_heads = config.n_heads
+        self.d_k = config.d_model // config.n_heads  # h in paper notation: n_heads
+        self.d_model = config.d_model
+        self.W_q = nn.Linear(config.d_model, config.d_model)
+        self.W_k = nn.Linear(config.d_model, config.d_model)
+        self.W_v = nn.Linear(config.d_model, config.d_model)
+        self.W_o = nn.Linear(config.d_model, config.d_model)
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        sigma_att: float = 0.0,
+        apply_noise: bool = True,
+    ) -> torch.Tensor:
+        """
+        Args:
+            query, key, value: (batch, seq_q/k, d_model)
+            mask: 1=keep, 0=block, broadcastable to (batch, heads, seq_q, seq_k)
+            sigma_att: per-layer ANC scale
+
+        Returns:
+            (batch, seq_q, d_model)
+        """
+        batch, seq_q, _ = query.shape
+        seq_k = key.size(1)
+        q = self.W_q(query)  # (batch, seq_q, d_model)
+        k = self.W_k(key)  # (batch, seq_k, d_model)
+        v = self.W_v(value)  # (batch, seq_k, d_model)
+        q = q.view(batch, seq_q, self.n_heads, self.d_k).transpose(1, 2)
+        k = k.view(batch, seq_k, self.n_heads, self.d_k).transpose(1, 2)
+        v = v.view(batch, seq_k, self.n_heads, self.d_k).transpose(1, 2)
+        # (batch, n_heads, seq_*, d_k)
+        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
+        # (batch, n_heads, seq_q, seq_k)
+        if apply_noise and sigma_att > 0.0:
+            # Eq. 4 — N_att is added to the scores, then scaled? The displayed
+            # equation is softmax( (QK^T + N_att) / √d_k ) V, so noise is
+            # inside the parentheses before the √d_k divide. Official code
+            # adds noise AFTER dividing by √d_k. We follow Eq. 4:
+            #   scores = (QK^T)/√d_k already computed; equivalent to adding
+            #   N_att/√d_k to these scores.
+            scores = scores + GaussianMechanism.add_noise(
+                torch.zeros_like(scores), sigma_att
+            ) / math.sqrt(self.d_k)
+        if mask is not None:
+            scores = scores.masked_fill(mask == 0, float("-inf"))
+        attn = F.softmax(scores, dim=-1)  # (batch, n_heads, seq_q, seq_k)
+        attn = torch.nan_to_num(attn, nan=0.0)
+        attn = self.dropout(attn)
+        out = torch.matmul(attn, v)  # (batch, n_heads, seq_q, d_k)
+        out = out.transpose(1, 2).contiguous().view(batch, seq_q, self.d_model)
+        return self.W_o(out)  # (batch, seq_q, d_model)
+
+
