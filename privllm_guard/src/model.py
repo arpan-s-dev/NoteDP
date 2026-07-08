@@ -212,3 +212,273 @@ class PrivacyAwareAttention(nn.Module):
         return self.W_o(out)  # (batch, seq_q, d_model)
 
 
+class TransformerBlock(nn.Module):
+    """Standard pre-norm transformer block with privacy-aware attention.
+
+    [FROM_OFFICIAL_CODE] Pre-LN residual: x + sublayer(LN(x))
+    [UNSPECIFIED] Paper does not state pre vs post norm.
+    """
+
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__()
+        self.self_attn = PrivacyAwareAttention(config)
+        self.norm1 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
+        self.norm2 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
+        self.ff = nn.Sequential(
+            nn.Linear(config.d_model, config.d_ff),
+            _activation(config.activation),
+            nn.Dropout(config.dropout),
+            nn.Linear(config.d_ff, config.d_model),
+            nn.Dropout(config.dropout),
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        sigma_att: float = 0.0,
+        apply_noise: bool = True,
+    ) -> torch.Tensor:
+        h = self.norm1(x)  # (batch, seq, d_model)
+        x = x + self.self_attn(
+            h, h, h, mask=mask, sigma_att=sigma_att, apply_noise=apply_noise
+        )
+        x = x + self.ff(self.norm2(x))
+        return x  # (batch, seq, d_model)
+
+
+class DecoderBlock(nn.Module):
+    """§III — autoregressive decoder block with causal self-attention + cross-attention.
+
+    Cross-attention is not given an extra equation; we reuse Eq. 4 noise on
+    both self- and cross-attention. [PARTIALLY_SPECIFIED]
+    """
+
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__()
+        self.self_attn = PrivacyAwareAttention(config)
+        self.cross_attn = PrivacyAwareAttention(config)
+        self.norm1 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
+        self.norm2 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
+        self.norm3 = nn.LayerNorm(config.d_model, eps=config.norm_eps)
+        self.ff = nn.Sequential(
+            nn.Linear(config.d_model, config.d_ff),
+            _activation(config.activation),
+            nn.Dropout(config.dropout),
+            nn.Linear(config.d_ff, config.d_model),
+            nn.Dropout(config.dropout),
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        memory: torch.Tensor,
+        self_mask: torch.Tensor | None = None,
+        memory_mask: torch.Tensor | None = None,
+        sigma_att: float = 0.0,
+        apply_noise: bool = True,
+    ) -> torch.Tensor:
+        h = self.norm1(x)
+        x = x + self.self_attn(
+            h, h, h, mask=self_mask, sigma_att=sigma_att, apply_noise=apply_noise
+        )
+        h = self.norm2(x)
+        x = x + self.cross_attn(
+            h,
+            memory,
+            memory,
+            mask=memory_mask,
+            sigma_att=sigma_att,
+            apply_noise=apply_noise,
+        )
+        x = x + self.ff(self.norm3(x))
+        return x
+
+
+class SensitivityAnalyzer(nn.Module):
+    """§III — once-per-sequence high/medium/low privacy profile classifier.
+
+    "At sequence start, a single forward pass through the sensitivity analyzer
+    classifies the input's privacy profile (high/medium/low)."
+    """
+
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__()
+        # [FROM_OFFICIAL_CODE] 2-layer MLP on mean-pooled states → 3 classes
+        self.classifier = nn.Sequential(
+            nn.Linear(config.d_model, config.d_model // 2),
+            nn.ReLU(),
+            nn.Linear(config.d_model // 2, 3),
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        pooled = hidden_states.mean(dim=1)  # (batch, d_model)
+        return F.softmax(self.classifier(pooled), dim=-1)  # (batch, 3)
+
+
+class PrivacyRiskAssessor(nn.Module):
+    """§IV.D, Eq. 14 — token-level P(leak_i | y_{≤i}).
+
+    w_i comes from NER/ICD weights supplied by the caller, not this module.
+    """
+
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__()
+        self.risk_scorer = nn.Sequential(
+            nn.Linear(config.d_model, config.d_model // 4),
+            nn.ReLU(),
+            nn.Linear(config.d_model // 4, 1),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.risk_scorer(hidden_states).squeeze(-1)  # (batch, seq_len)
+
+
+class PrivLLMGuard(nn.Module):
+    """§III–§IV — PrivLLM-Guard encoder–decoder with ANC and risk head.
+
+    Composed of:
+      - PrivacyAwareEmbedding (Eq. 3)
+      - Encoder stack of TransformerBlock (Eq. 4, hierarchical σ_att)
+      - Decoder stack of DecoderBlock (autoregressive)
+      - SensitivityAnalyzer (ANC, once per sequence)
+      - PrivacyRiskAssessor (Eq. 14)
+      - LM head + medical entity head (§IV.C L_medical)
+    """
+
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.embedding = PrivacyAwareEmbedding(config)
+        self.encoder_layers = nn.ModuleList(
+            [TransformerBlock(config) for _ in range(config.n_layers)]
+        )
+        self.decoder_layers = nn.ModuleList(
+            [DecoderBlock(config) for _ in range(config.n_decoder_layers)]
+        )
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+        self.entity_classifier = nn.Linear(config.d_model, config.n_entity_types)
+        self.sensitivity_analyzer = SensitivityAnalyzer(config)
+        self.privacy_risk_assessor = PrivacyRiskAssessor(config)
+        self.anc = AdaptiveNoiseCalibrator(
+            sigma_emb=config.sigma_emb,
+            sigma_att=config.sigma_att,
+            multipliers={
+                "high": config.anc_high,
+                "medium": config.anc_medium,
+                "low": config.anc_low,
+            },
+        )
+        self._init_weights()
+
+    def _init_weights(self) -> None:
+        # [FROM_OFFICIAL_CODE] Xavier uniform Linear; Embedding N(0, 0.02)
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0.0, std=0.02)
+
+    def encode(
+        self,
+        input_ids: torch.Tensor,
+        noise: NoiseParameters,
+        apply_noise: bool = True,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Bidirectional encoder (§III).
+
+        Returns:
+            memory: (batch, src_len, d_model)
+            src_pad_mask: (batch, 1, 1, src_len)
+        """
+        src_pad = padding_mask(input_ids, self.config.pad_token_id)
+        hidden = self.embedding(
+            input_ids, sigma_emb=noise.sigma_emb, apply_noise=apply_noise
+        )
+        layer_sigmas = hierarchical_layer_sigmas(noise.sigma_att, len(self.encoder_layers))
+        for layer, sigma in zip(self.encoder_layers, layer_sigmas):
+            hidden = layer(hidden, mask=src_pad, sigma_att=sigma, apply_noise=apply_noise)
+        return hidden, src_pad
+
+    def decode(
+        self,
+        tgt_ids: torch.Tensor,
+        memory: torch.Tensor,
+        memory_mask: torch.Tensor | None,
+        noise: NoiseParameters,
+        apply_noise: bool = True,
+    ) -> torch.Tensor:
+        """Autoregressive decoder (§III)."""
+        batch, tgt_len = tgt_ids.shape
+        causal = subsequent_mask(tgt_len, device=tgt_ids.device)
+        tgt_pad = padding_mask(tgt_ids, self.config.pad_token_id)
+        self_mask = combine_masks(causal, tgt_pad)
+        hidden = self.embedding(
+            tgt_ids, sigma_emb=noise.sigma_emb, apply_noise=apply_noise
+        )
+        layer_sigmas = hierarchical_layer_sigmas(
+            noise.sigma_att, len(self.decoder_layers)
+        )
+        for layer, sigma in zip(self.decoder_layers, layer_sigmas):
+            hidden = layer(
+                hidden,
+                memory,
+                self_mask=self_mask,
+                memory_mask=memory_mask,
+                sigma_att=sigma,
+                apply_noise=apply_noise,
+            )
+        return hidden  # (batch, tgt_len, d_model)
+
+    def calibrate_noise(
+        self,
+        input_ids: torch.Tensor,
+        apply_noise: bool = True,
+    ) -> NoiseParameters:
+        """§III — ANC once per sequence from a noise-free probe pass."""
+        with torch.no_grad():
+            probe = self.embedding(input_ids, sigma_emb=0.0, apply_noise=False)
+            probs = self.sensitivity_analyzer(probe)
+        return self.anc.from_probs(probs)
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        decoder_input_ids: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        apply_noise: bool = True,
+        noise: NoiseParameters | None = None,
+    ) -> dict[str, torch.Tensor | NoiseParameters | None]:
+        """Teacher-forced generation forward.
+
+        If decoder_input_ids is omitted, we use shifted input_ids as a
+        denoising/summarization stand-in (same document reconstruction).
+        """
+        if noise is None:
+            noise = self.calibrate_noise(input_ids, apply_noise=apply_noise)
+        memory, src_pad = self.encode(input_ids, noise, apply_noise=apply_noise)
+        if decoder_input_ids is None:
+            decoder_input_ids = input_ids
+        dec_hidden = self.decode(
+            decoder_input_ids, memory, src_pad, noise, apply_noise=apply_noise
+        )
+        logits = self.lm_head(dec_hidden)  # (batch, tgt_len, vocab)
+        entity_logits = self.entity_classifier(memory)  # (batch, src_len, n_entities)
+        leak_probs = self.privacy_risk_assessor(dec_hidden)  # (batch, tgt_len)
+        # ANC probe is also run under no_grad in calibrate_noise. Official
+        # pllm.py detaches here; the 3-way profile is not in Eq. 12, so it
+        # does not receive LM gradients unless a profile label is supplied.
+        sensitivity_scores = self.sensitivity_analyzer(memory.detach())
+        return {
+            "logits": logits,
+            "entity_logits": entity_logits,
+            "hidden_states": dec_hidden,
+            "encoder_hidden": memory,
+            "leak_probs": leak_probs,
+            "sensitivity_scores": sensitivity_scores,
+            "noise": noise,
+            "labels": labels,
+        }
