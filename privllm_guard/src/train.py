@@ -149,3 +149,121 @@ def dp_sgd_microbatch(
 
 
 def train(
+    cfg: dict[str, Any],
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    device: torch.device | None = None,
+    use_teacher: bool = True,
+) -> dict[str, Any]:
+    """Full training loop (full mode)."""
+    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    set_seed(int(cfg["training"]["seed"]))
+    model = PrivLLMGuard(ModelConfig.from_dict(cfg)).to(device)
+    teacher = None
+    if use_teacher:
+        teacher = copy.deepcopy(model)
+        teacher.eval()
+        for p in teacher.parameters():
+            p.requires_grad = False
+    optimizer = build_optimizer(model, cfg)
+    # [FROM_OFFICIAL_CODE] CosineAnnealingLR over epochs. Paper unspecified.
+    scheduler = CosineAnnealingLR(optimizer, T_max=int(cfg["training"]["epochs"]))
+    weights = LossWeights.from_dict(cfg)
+    clipper = AdaptiveGradientClipping(
+        initial_clip=float(cfg["privacy"]["clip_C"]),
+        momentum=float(cfg["privacy"]["clip_momentum"]),
+        quantile=float(cfg["privacy"]["clip_quantile_p"]),
+    )
+    accountant = RDPAccountant(cfg["privacy"]["rdp_orders"])
+    epochs = int(cfg["training"]["epochs"])
+    n_steps = max(1, epochs * len(train_loader))
+    # Spend the decoder training budget across optimizer steps (Eq. 9 ε_dec).
+    epsilon_step = float(cfg["privacy"]["epsilon_dec"]) / n_steps
+    delta = float(cfg["privacy"]["delta"])
+    patience = int(cfg["training"]["early_stop_patience"])
+    best_val = float("inf")
+    stale = 0
+    history: dict[str, list[float]] = {"train_loss": [], "val_loss": [], "epsilon": []}
+
+    for epoch in range(epochs):
+        model.train()
+        running = 0.0
+        n = 0
+        for batch in train_loader:
+            optimizer.zero_grad(set_to_none=True)
+            loss, sigma = dp_sgd_microbatch(
+                model, batch, teacher, weights, clipper, epsilon_step, delta, device
+            )
+            optimizer.step()
+            accountant.accumulate(sigma=sigma, sensitivity=clipper.clip_bound)
+            running += float(loss.item())
+            n += 1
+        scheduler.step()
+        train_loss = running / max(n, 1)
+        val_loss = evaluate_loss(model, val_loader, weights, device)
+        eps = accountant.get_epsilon(delta)
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+        history["epsilon"].append(eps)
+        if val_loss + 1e-6 < best_val:
+            best_val = val_loss
+            stale = 0
+        else:
+            stale += 1
+            if stale >= patience:
+                break
+    return {"model": model, "teacher": teacher, "history": history, "accountant": accountant}
+
+
+@torch.no_grad()
+def evaluate_loss(
+    model: PrivLLMGuard,
+    loader: DataLoader,
+    weights: LossWeights,
+    device: torch.device,
+) -> float:
+    model.eval()
+    total = 0.0
+    n = 0
+    for batch in loader:
+        input_ids = batch["input_ids"].to(device)
+        labels = batch["labels"].to(device)
+        entity_labels = batch["entity_labels"].to(device)
+        dec_in = batch["decoder_input_ids"].to(device)
+        out = model(
+            input_ids,
+            decoder_input_ids=dec_in,
+            labels=labels,
+            apply_noise=False,
+        )
+        parts = combined_loss(
+            out["logits"],
+            labels,
+            out["leak_probs"],
+            out["entity_logits"],
+            entity_labels,
+            weights,
+        )
+        total += float(parts["loss"].item())
+        n += 1
+    return total / max(n, 1)
+
+
+def main(config_path: str = "configs/walkthrough.yaml") -> None:
+    from src.data import stratified_splits
+
+    cfg = load_config(str(Path(config_path)))
+    train_ds, val_ds, _ = stratified_splits(
+        num_samples=32,
+        max_len=int(cfg["model"]["max_seq_len"]),
+        vocab_size=int(cfg["model"]["vocab_size"]),
+        seed=int(cfg["training"]["seed"]),
+    )
+    train_loader = DataLoader(train_ds, batch_size=int(cfg["training"]["batch_size"]), shuffle=True)
+    val_loader = DataLoader(val_ds, batch_size=int(cfg["training"]["batch_size"]))
+    result = train(cfg, train_loader, val_loader, use_teacher=False)
+    print(result["history"])
+
+
+if __name__ == "__main__":
+    main()
