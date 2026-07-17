@@ -153,3 +153,69 @@ def membership_inference_gap(
 
 
 @torch.no_grad()
+def generate_private(
+    model: PrivLLMGuard,
+    input_ids: torch.Tensor,
+    max_new_tokens: int,
+    epsilon_out: float,
+    delta_u: float,
+    monitor: RealTimePrivacyMonitor | None = None,
+    apply_noise: bool = True,
+    bos_id: int = 1,
+    eos_id: int | None = None,
+    greedy: bool = False,
+) -> torch.Tensor:
+    """§IV.B Eq. 7 — exponential-mechanism decoding with per-token ε_t = ε_out / T.
+
+    §IV.D: for T=512, ε₀ = 0.1/512 ≈ 1.95e-4 when ε_out is the generation share.
+    Set greedy=True to decode argmax (non-private baseline for the demo).
+    """
+    model.eval()
+    device = input_ids.device
+    noise = model.calibrate_noise(input_ids, apply_noise=apply_noise)
+    memory, src_pad = model.encode(input_ids, noise, apply_noise=apply_noise)
+    batch = input_ids.size(0)
+    ys = torch.full((batch, 1), bos_id, dtype=torch.long, device=device)
+    eps_t = epsilon_out / max(max_new_tokens, 1)
+    finished = torch.zeros(batch, dtype=torch.bool, device=device)
+    for _ in range(max_new_tokens):
+        hidden = model.decode(ys, memory, src_pad, noise, apply_noise=apply_noise)
+        logits = model.lm_head(hidden[:, -1, :])  # (batch, vocab)
+        if greedy:
+            next_tok = logits.argmax(dim=-1)
+        else:
+            next_tok = exponential_mechanism_sample(logits, eps_t, delta_u)
+        if eos_id is not None:
+            next_tok = torch.where(finished, torch.full_like(next_tok, eos_id), next_tok)
+            finished = finished | (next_tok == eos_id)
+        ys = torch.cat([ys, next_tok.unsqueeze(-1)], dim=1)
+        if monitor is not None:
+            leak = model.privacy_risk_assessor(hidden[:, -1:, :])
+            monitor.tracker.consume(eps_t)
+            if monitor.should_recalibrate(leak.mean(dim=-1)):
+                noise = model.anc.emergency_recalibrate(noise)
+        if bool(finished.all()):
+            break
+    return ys
+
+
+@torch.no_grad()
+def timed_forward(model: PrivLLMGuard, input_ids: torch.Tensor, repeats: int = 5) -> float:
+    """§V Table 3 latency helper (milliseconds). Will not match A100 245 ms on CPU."""
+    model.eval()
+    # warmup
+    _ = model(input_ids, apply_noise=True)
+    if input_ids.is_cuda:
+        torch.cuda.synchronize()
+    start = time.perf_counter()
+    for _ in range(repeats):
+        _ = model(input_ids, apply_noise=True)
+        if input_ids.is_cuda:
+            torch.cuda.synchronize()
+    elapsed = (time.perf_counter() - start) / repeats
+    return elapsed * 1000.0
+
+
+def make_generation_monitor(epsilon_out: float, window_size: int = 50) -> RealTimePrivacyMonitor:
+    tracker = PrivacyBudgetTracker(total_budget=epsilon_out, window_size=window_size)
+    return RealTimePrivacyMonitor(tracker)
