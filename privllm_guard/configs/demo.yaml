@@ -1,0 +1,78 @@
+# Internship live-demo config. Same privacy constants as the paper;
+# architecture is shrunk so Hugging Face Spaces CPU can run it.
+# Demo training uses a higher LR than Appendix A so the tiny model
+# can copy the 7 synthetic templates. That is a showcase deviation.
+
+model:
+  d_model: 64
+  n_heads: 4
+  n_layers: 2
+  n_decoder_layers: 2
+  d_ff: 128
+  vocab_size: 256
+  max_seq_len: 64
+  dropout: 0.1
+  activation: "gelu"
+  norm_eps: 1.0e-5
+  pad_token_id: 0
+  tie_embeddings: false
+
+privacy:
+  epsilon_total: 0.1
+  delta: 1.0e-6
+  epsilon_enc: 0.025
+  epsilon_dec: 0.035
+  epsilon_att: 0.020
+  epsilon_out: 0.020
+  sigma_emb: 0.5
+  sigma_att: 0.3
+  clip_C: 1.2
+  clip_quantile_p: 0.5
+  clip_momentum: 0.9
+  window_size: 16
+  window_spike_fraction: 0.15
+  rdp_orders: [2, 4, 8, 16, 32, 64]
+  anc_sigma_multipliers:
+    high: 1.5
+    medium: 1.0
+    low: 0.5
+  exponential_delta_u: 1.0
+  beam_width: 3
+
+training:
+  optimizer: "adamw"
+  lr: 0.001
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+  weight_decay: 0.0
+  batch_size: 7
+  epochs: 40
+  early_stop_patience: 20
+  lambda_privacy: 0.1
+  lambda_utility: 0.1
+  lambda_medical: 0.1
+  distill_temperature: 2.0
+  seed: 42
+
+data:
+  window_size: 64
+  window_overlap: 16
+  train_fraction: 0.70
+  val_fraction: 0.15
+  test_fraction: 0.15
+  n_entity_types: 7
+  specialties:
+    - cardiology
+    - oncology
+    - neurology
+    - emergency_medicine
+    - internal_medicine
+    - radiology
+    - pathology
+
+evaluation:
+  w_mir: 0.30
+  w_air: 0.25
+  w_mes: 0.25
+  w_dls: 0.20
+  epsilon_sweep: [0.1]
