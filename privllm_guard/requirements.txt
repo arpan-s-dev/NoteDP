@@ -1,3 +1,5 @@
 torch>=2.0.0  # encoder-decoder, DP-SGD
 pyyaml>=6.0  # configs/base.yaml
 numpy>=1.24.0  # optional numeric helpers
+gradio>=4.44.0  # Hugging Face Spaces live demo
+gradio>=4.44.0  # Hugging Face Spaces live demo
