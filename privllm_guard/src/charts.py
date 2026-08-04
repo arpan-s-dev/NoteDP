@@ -211,7 +211,231 @@ DISPOSITION
 Discharged, ambulatory. Return precautions for chest pain, confusion, or BP symptoms.
 """,
     ),
+    SyntheticChart(
+        id="syn-4405",
+        display_name="Amina Qureshi",
+        mrn="SYN-4405",
+        age=62,
+        sex="F",
+        specialty="Internal medicine",
+        note_type="Inpatient progress note",
+        facility=FACILITY,
+        encounter_date="April 11, 2026",
+        risk_tag="low",
+        one_line="CAP improving on ceftriaxone and azithromycin.",
+        excerpt=(
+            "Sixty-two year old woman admitted for community-acquired pneumonia. "
+            "Treated with ceftriaxone and azithromycin. Hypoxia improved on hospital day three."
+        ),
+        note="""SYNTHETIC CHART — not a real person.
+Fictional Memorial Hospital  |  MRN SYN-4405  |  HD3  |  2026-04-11
+
+INTERNAL MEDICINE PROGRESS NOTE
+Patient: Amina Qureshi  |  62-year-old woman
+
+INTERVAL
+Community-acquired pneumonia, day 3. Cough productive of yellow sputum, improving.
+O2 weaned from 4 L NC to room air this morning. SpO2 94% ambulating. Appetite fair.
+No diarrhea on ceftriaxone + azithromycin.
+
+EXAM
+T 37.2, HR 88, RR 18, BP 128/76. Crackles right base, decreased. No edema.
+
+DATA
+WBC 9.8 ↓ from 14.1. CXR: improving right lower lobe infiltrate. Blood cultures NGTD.
+
+PLAN
+Complete 5-day total antibiotics. PT for deconditioning. Discharge tomorrow if
+room-air stable. Lives with spouse in Eastbridge Apartments, unit 4B (fictional).
+""",
+    ),
+    SyntheticChart(
+        id="syn-4406",
+        display_name="Theo Brandt",
+        mrn="SYN-4406",
+        age=55,
+        sex="M",
+        specialty="Radiology",
+        note_type="CT report",
+        facility=FACILITY,
+        encounter_date="May 19, 2026",
+        risk_tag="low",
+        one_line="1 cm RUL nodule; follow-up CT in six months.",
+        excerpt=(
+            "CT chest demonstrates a 1 cm right-upper-lobe nodule without lymphadenopathy. "
+            "Recommend follow-up CT in six months."
+        ),
+        note="""SYNTHETIC CHART — not a real person.
+Fictional Memorial Hospital  |  MRN SYN-4406  |  2026-05-19
+
+CT CHEST WITHOUT CONTRAST
+Patient: Theo Brandt  |  55-year-old man  |  Indication: 30 pack-year smoking history,
+now quit; cough.
+
+FINDINGS
+1. 11 mm solid nodule in the right upper lobe, posterior segment, no fat or
+   calcification. No other nodules >4 mm.
+2. No mediastinal or hilar lymphadenopathy.
+3. No effusion. Mild centrilobular emphysema.
+
+IMPRESSION
+Indeterminate 11 mm RUL nodule. Recommend follow-up CT chest in 6 months
+(Fleischner-style). Correlate with pulmonary clinic. Ordering PCP: Dr. L. Cho
+(fictional). Patient notified via portal.
+""",
+    ),
+    SyntheticChart(
+        id="syn-4407",
+        display_name="Sofia Alvarez",
+        mrn="SYN-4407",
+        age=49,
+        sex="F",
+        specialty="Pathology",
+        note_type="Surgical pathology",
+        facility=FACILITY,
+        encounter_date="June 4, 2026",
+        risk_tag="low",
+        one_line="Lung biopsy: moderately differentiated adenocarcinoma.",
+        excerpt=(
+            "Biopsy shows moderately differentiated adenocarcinoma. Immunostains support "
+            "a pulmonary origin. Correlate with imaging."
+        ),
+        note="""SYNTHETIC CHART — not a real person.
+Fictional Memorial Hospital  |  MRN SYN-4407  |  Surgical pathology  |  2026-06-04
+
+SPECIMEN
+Right upper lobe core biopsy — Sofia Alvarez, 49-year-old woman.
+
+MICROSCOPIC
+Cores of lung with an infiltrative glandular proliferation, moderate nuclear
+atypia, and desmoplasia. No in situ carcinoma seen on these cores.
+
+IMMUNO
+TTF-1 positive, Napsin A positive, p40 negative, CK7 positive, CK20 negative.
+
+DIAGNOSIS
+Moderately differentiated adenocarcinoma, consistent with pulmonary origin.
+Correlate with CT (see SYN-linked imaging in this fictional system). Molecular
+testing (EGFR/ALK/ROS1/KRAS/BRAF/MET/RET/NTRK/PD-L1) recommended on remaining block.
+""",
+    ),
+    SyntheticChart(
+        id="syn-4408",
+        display_name="Harlan Quill",
+        mrn="SYN-4408",
+        age=92,
+        sex="M",
+        specialty="Medical genetics / neurology",
+        note_type="Consult",
+        facility=FACILITY,
+        encounter_date="March 1, 2026",
+        risk_tag="high",
+        one_line="High re-identification risk: age + rare occupation + tiny town + rare disease.",
+        excerpt=(
+            "Ninety-two year old retired neurosurgeon from a very small town with a rare "
+            "genetic disorder. No name is required for this combination to be identifying."
+        ),
+        note="""SYNTHETIC CHART — not a real person.
+THIS NOTE IS THE PAPER'S QUASI-IDENTIFIER EXAMPLE, written as a full chart.
+Fictional Memorial Hospital  |  MRN SYN-4408  |  2026-03-01
+
+GENETICS / NEUROLOGY CONSULT
+Patient: Harlan Quill  |  92-year-old man
+
+REASON FOR CONSULT
+Metabolic derangement and chronic neuropathy. Referring team asked whether a rare
+inborn error of metabolism explains adult presentations.
+
+HISTORY
+Mr. Quill is a retired neurosurgeon. He still lives independently in Graymere
+Crossing, population ~900 (fictional). Family describes a maple-like odor during
+illness in childhood, never formally diagnosed. Adult history of intermittent
+encephalopathy with protein loads. No living first-degree relatives in the county.
+
+This combination — very advanced age, highly unique occupation, tiny geography,
+and a rare metabolic phenotype — contains no legal name in the assessment below
+and is still high risk for re-identification (see paper § qualitative cases).
+
+ASSESSMENT
+Possible late-diagnosed maple syrup urine disease variant versus other branched-chain
+aminoacidopathy. Do not over-generalize to "dietary irregularities" if confirmatory
+labs are pending (paper failure case on rare disease wording).
+
+PLAN
+Plasma amino acids, urine organic acids. Dietary protein review with nutrition.
+Avoid publishing this constellation in a public model output without generalization
+(age band, region not town, occupation class not "neurosurgeon").
+""",
+    ),
+    SyntheticChart(
+        id="syn-4409",
+        display_name="Leila Nour",
+        mrn="SYN-4409",
+        age=34,
+        sex="F",
+        specialty="Obstetrics (postpartum medicine)",
+        note_type="Postpartum discharge",
+        facility=FACILITY,
+        encounter_date="July 9, 2026",
+        risk_tag="high",
+        one_line="Postpartum preeclampsia; dates and infant sex are quasi-identifiers.",
+        excerpt=(
+            "Thirty-four year old woman postpartum day two with preeclampsia. "
+            "Blood pressure improved on labetalol. Discharged with close follow-up."
+        ),
+        note="""SYNTHETIC CHART — not a real person.
+Fictional Memorial Hospital  |  MRN SYN-4409  |  PPD2  |  2026-07-09
+
+POSTPARTUM DISCHARGE SUMMARY
+Patient: Leila Nour  |  34-year-old woman  |  G2P2  |  Delivery 2026-07-07  03:12
+
+COURSE
+Primary cesarean for arrest of descent. Infant: term female, 3210 g, Apgars 8 and 9
+(fictional). Intrapartum BP 168/102, proteinuria 2+. Started labetalol 200 mg TID.
+Magnesium completed 24 hours. Headache resolved. Platelets 142k, Cr 0.7, AST 38.
+
+DISPOSITION
+Home with partner. BP cuff provided. Clinic 2026-07-12. Warning symptoms reviewed.
+Address on file: 440 Crescent Row, Port Sable (fictional). Email on file:
+leila.nour.synth@example.invalid
+""",
+    ),
+    SyntheticChart(
+        id="syn-4410",
+        display_name="Devon Marsh",
+        mrn="SYN-4410",
+        age=29,
+        sex="M",
+        specialty="Psychiatry / IM",
+        note_type="Consult",
+        facility=FACILITY,
+        encounter_date="August 2, 2026",
+        risk_tag="high",
+        one_line="Occupation + small clinic + exact dates increase linkability.",
+        excerpt=(
+            "Twenty-nine year old man evaluated for medication-related hyponatremia. "
+            "Sodium improved with fluid restriction. Follow up with primary clinic."
+        ),
+        note="""SYNTHETIC CHART — not a real person.
+Fictional Memorial Hospital  |  MRN SYN-4410  |  2026-08-02
+
+MEDICINE CONSULT
+Patient: Devon Marsh  |  29-year-old man  |  Occupation: night pharmacist at
+the only 24-hour pharmacy in Red Kettle, NM (fictional; pop. 2,100)
+
+HPI
+Brought in after a coworker found him confused at shift change 2026-08-01 23:40.
+Na 118. On sertraline 150 mg. Polydipsia. CT head negative. Confusion cleared
+as Na rose to 128 with 3% saline then fluid restriction.
+
+PLAN
+Hold sertraline pending psych. Repeat BMP 2026-08-03. Do not document the
+workplace name in any external LLM prompt — it is a singleton quasi-identifier
+together with age and town.
+""",
+    ),
 ]
+
 
 def list_charts() -> list[dict]:
     rows = []
