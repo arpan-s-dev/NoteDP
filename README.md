@@ -83,3 +83,139 @@ flowchart TB
    - `PrivLLMGuard` forward with and without noise (`apply_noise`)
    - metrics: risk, σ, BLEU/ROUGE between reconstructions, hierarchical ε split
 5. UI shows original note, generalized note, clean reconstruction, private reconstruction.
+
+## Tools used
+
+| Library | Role in this repo |
+|---|---|
+| `torch` | Encoder–decoder, DP-SGD, noise tensors |
+| `pyyaml` | Load `configs/*.yaml` via `utils.load_config` |
+| `numpy` | Declared; used lightly where needed |
+| `fastapi` / `uvicorn` | Local chart API and static UI |
+| `pydantic` | Request body for `/api/run` (via FastAPI) |
+| `gradio` | Alternate demo UI in `demo_ui.py` |
+
+```mermaid
+flowchart LR
+  subgraph stages [Stage]
+    CFG[load_config]
+    MOD[model forward]
+    PRIV[privacy.py noise and RDP]
+    UI[server / Gradio]
+  end
+  CFG --> pyyaml
+  MOD --> torch
+  PRIV --> torch
+  UI --> fastapi
+  UI --> gradio
+```
+
+## Architecture
+
+```mermaid
+flowchart TB
+  ROOT[repo root app.py]
+  PKG[privllm_guard]
+  ROOT -->|uvicorn FastAPI| PKG
+  PKG --> SRC[src]
+  PKG --> CFG[configs]
+  PKG --> CKPT[checkpoints/demo.pt]
+  PKG --> WEBUI[webui]
+  SRC --> privacy.py
+  SRC --> model.py
+  SRC --> train.py
+  SRC --> evaluate.py
+  SRC --> pipeline.py
+  SRC --> charts.py
+  SRC --> redact.py
+  SRC --> server.py
+```
+
+Major folders:
+
+| Path | What it holds |
+|---|---|
+| `privllm_guard/src/` | Library code: privacy, model, train, eval, charts, UI backends |
+| `privllm_guard/configs/` | Hyperparameters (paper / walkthrough / demo) |
+| `privllm_guard/webui/` | Chart-review HTML/CSS/JS |
+| `privllm_guard/notebooks/` | Equation walkthrough notebook |
+| `privllm_guard/scripts/` | `train_demo_checkpoint.py` |
+| `docs/screenshots/` | Local UI captures |
+| `web/` | Optional static Vercel shell (iframe only; does not run the model) |
+
+## Results
+
+There is **no** checked-in reproduction of the paper’s BLEU-4 = 0.897 / ROUGE-L = 0.923 on MIMIC-III. Those numbers appear only as citations in docs. What exists locally:
+
+- Walkthrough notebook sanity checks for shapes and Privacy Score arithmetic.
+- Demo checkpoint training logs from `scripts/train_demo_checkpoint.py` (toy loss on synthetic excerpts).
+- Live UI metrics (cosine, BLEU between noisy and clean reconstructions) computed at runtime — not published benchmark tables.
+
+## Quickstart (Windows)
+
+From the **repo root** (wherever you cloned ChartCloak):
+
+```powershell
+python -m pip install -r requirements.txt
+python app.py
+```
+
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080).
+
+Optional Gradio UI:
+
+```powershell
+cd privllm_guard
+python app.py
+```
+
+Optional retrain of the tiny demo weights:
+
+```powershell
+cd privllm_guard
+python scripts/train_demo_checkpoint.py
+```
+
+Optional DP-SGD toy loop:
+
+```powershell
+cd privllm_guard
+python -m src.train
+```
+
+## Project tree
+
+```text
+.
+├── LICENSE
+├── README.md
+├── .env.example
+├── pytest.ini
+├── app.py                          # starts FastAPI chart UI on :8080
+├── requirements.txt
+├── DEPLOY.md                       # hosting notes (HF PRO, Vercel limits)
+├── docs/screenshots/
+├── privllm_guard/
+│   ├── app.py                      # Gradio entry
+│   ├── configs/                    # base.yaml, walkthrough.yaml, demo.yaml
+│   ├── checkpoints/demo.pt         # tiny CPU demo weights
+│   ├── notebooks/walkthrough.ipynb
+│   ├── scripts/train_demo_checkpoint.py
+│   ├── tests/                      # pytest smokes
+│   ├── webui/                      # chart UI static files
+│   ├── REPRODUCTION_NOTES.md
+│   └── src/
+│       ├── privacy.py              # GaussianMechanism, RDP, ANC, monitor
+│       ├── model.py                # PrivLLMGuard encoder–decoder
+│       ├── loss.py                 # combined_loss, distillation
+│       ├── train.py                # dp_sgd_microbatch
+│       ├── evaluate.py             # bleu4, rouge_l, generate_private
+│       ├── data.py                 # SyntheticClinicalNotes
+│       ├── charts.py               # 10 fictional charts
+│       ├── redact.py               # display generalization
+│       ├── pipeline.py             # DemoEngine.run
+│       ├── server.py               # FastAPI routes
+│       ├── demo_ui.py              # Gradio
+│       └── tokenizer.py
+└── web/                            # static iframe landing (optional)
+```
