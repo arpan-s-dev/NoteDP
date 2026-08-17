@@ -219,3 +219,66 @@ python -m src.train
 │       └── tokenizer.py
 └── web/                            # static iframe landing (optional)
 ```
+
+## How it works (a bit more technical)
+
+Paper reference: Alghamdi, *An adaptive differential privacy framework for clinical LLMs…*, Sci Rep 16:15781 (2026), DOI [10.1038/s41598-026-45883-6](https://doi.org/10.1038/s41598-026-45883-6).
+
+Core pieces mapped to code:
+
+| Paper idea | Code |
+|---|---|
+| Embedding noise (Eq. 3) | `PrivacyAwareEmbedding` in `model.py` |
+| Attention noise (Eq. 4) | `PrivacyAwareAttention` in `model.py` |
+| Gradient clip + Gaussian DP-SGD (Eqs. 5–6, 11) | `AdaptiveGradientClipping`, `dp_sgd_microbatch` |
+| Hierarchical ε (Eq. 9) | `configs/*.yaml` `epsilon_enc/dec/att/out` |
+| RDP accounting (Eqs. 16–17) | `RDPAccountant` |
+| Sliding-window budget (Eqs. 18–19) | `PrivacyBudgetTracker`, `RealTimePrivacyMonitor` |
+| Exponential mechanism (Eq. 7) | `exponential_mechanism_sample`, `generate_private` |
+| Once-per-sequence ANC | `AdaptiveNoiseCalibrator`, `SensitivityAnalyzer` |
+
+The demo checkpoint is trained **without** full DP-SGD (higher LR, synthetic overfitting) so the UI can show readable reconstructions. Paper-style DP-SGD lives in `train.py`. See `REPRODUCTION_NOTES.md` for paper vs official GitHub disagreements.
+
+## API reference (local FastAPI)
+
+| Method | Path | Handler |
+|---|---|---|
+| GET | `/` | `server.index` |
+| GET | `/api/charts` | `api_charts` |
+| GET | `/api/charts/{chart_id}` | `api_chart` |
+| POST | `/api/run` | `api_run` body `{ "chart_id", "epsilon" }` |
+
+## Tests
+
+```powershell
+python -m pip install -r requirements.txt
+python -m pytest -q
+```
+
+Coverage is smoke-level: fictional census size, `sanitize_chart` / highlights, Gaussian σ, and FastAPI `GET /` plus chart routes. There is no test that trains the paper-scale model or hits MIMIC.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+## Limitations
+
+- **No real patient data.** Charts are fictional. Do not paste real PHI into the UI.
+- **Does not reproduce paper Table 2** (MIMIC-III / i2b2 / 8×A100).
+- **Tiny demo model** (`d_model=64`, short excerpts). Full notes are shown in the UI; the model only sees `chart.excerpt`.
+- **Hosted demo:** Hugging Face Gradio Spaces currently require PRO on free CPU. Vercel cannot run PyTorch. Use the local UI (`python app.py`). Details in `DEPLOY.md`.
+- Official paper code at `ansbuedu/code5` differs from several equations; this repo follows the paper body where they conflict.
+
+## Paper
+
+```bibtex
+@article{alghamdi2026privllmguard,
+  title   = {An adaptive differential privacy framework for clinical llms with context-aware noise calibration, hierarchical budgeting, and real-time auditing},
+  author  = {Alghamdi, Ans D.},
+  journal = {Scientific Reports},
+  volume  = {16},
+  pages   = {15781},
+  year    = {2026},
+  doi     = {10.1038/s41598-026-45883-6}
+}
+```

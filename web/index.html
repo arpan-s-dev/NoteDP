@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChartCloak — internship demo</title>
+  <style>
+    body { font-family: Georgia, serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+    header { padding: 1.5rem 2rem; }
+    h1 { margin: 0 0 0.4rem; font-size: 1.6rem; }
+    p { margin: 0.3rem 0 1rem; max-width: 52rem; line-height: 1.45; }
+    a { color: #93c5fd; }
+    iframe { width: 100%; height: calc(100vh - 8rem); border: 0; background: #fff; }
+    .note { font-size: 0.9rem; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ChartCloak</h1>
+    <p>
+      Internship demo of Alghamdi, <em>Scientific Reports</em> 16:15781 (2026) —
+      adaptive differential privacy for clinical LLMs.
+      The model runs on Hugging Face Spaces (CPU). This Vercel page only embeds it.
+    </p>
+    <p class="note">
+      Replace the iframe URL after you create the Space, then deploy this folder with Vercel.
+      Synthetic notes only — do not paste real patient records.
+    </p>
+  </header>
+  <iframe
+    title="ChartCloak Gradio demo"
+    src="https://arpanjeet-privllm-guard-demo.hf.space"
+    allow="clipboard-write; clipboard-read"
+  ></iframe>
+</body>
+</html>
