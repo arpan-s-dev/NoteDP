@@ -1,23 +1,20 @@
 # NoteDP
 
-Clinical NLP needs a language model over discharge summaries, med lists, and H&Ps. The data for that job are token sequences from identifiable records. Same tokens, two uses: clinical signal and identity.
+**Problem.** You cannot treat a clinical note like ordinary training text. A discharge summary, med list, or H&P is a record of one patient. If you train a language model on those notes, the model can memorize and later emit identifiers (an MRN, or a rare job + town + diagnosis). If you paste the note into a hosted LLM, you have already given that record to someone else. Either way the failure is the same: the language model is being used as if the data were anonymous. They are not.
 
-That yields two leakage channels.
+Name-stripping does not solve it. Quasi-identifiers stay in the tokens. The actual problem this project targets is: **run a language model on clinical note data without assuming the network is a safe store of patient identity.**
 
-1. **Training.** Fit on raw notes and the model can memorize rare n-grams (an MRN, or occupation + town + diagnosis) and emit them later. DP-SGD and representation noise are the formal response: one record should not change the released model much.
-2. **Inference.** Paste a note into a hosted prompt and the record has left the machine. Running locally avoids that channel. It does not, by itself, stop hidden states or generations from carrying identity.
-
-Deleting surface names is not a privacy proof. Quasi-identifiers stay in the sequence. Alghamdi’s **PrivLLM-Guard** (*Sci Rep* 16:15781, 2026) puts the protection in the network: Gaussian noise on embeddings (Eq. 3) and attention (Eq. 4), hierarchical ε, RDP accounting, budget monitoring at decode. The paper’s claim is train-and-generate under a stated (ε, δ).
-
-This repo (**NoteDP**) is that method at CPU scale, with a UI over **synthetic notes** in `src/charts.py` (ten invented records, e.g. Elena Voss / `SYN-4401`). The module name `charts.py` is leftover; the objects are notes. The network sees `excerpt` only. `redact.sanitize_chart` is display-side regex, not DP. Not an EHR. Not MIMIC Table 2.
+**What NoteDP does.** It implements Alghamdi’s PrivLLM-Guard (*Sci Rep* 16:15781, 2026) on a laptop. Privacy is applied *inside* the model: Gaussian noise on embeddings (Eq. 3) and attention (Eq. 4), a split ε budget, RDP accounting, and a monitor at decode. You get a small encoder-decoder plus a local UI over ten **synthetic** notes (`src/charts.py`; the filename is leftover). The network only consumes the `excerpt` field. Display regex (`redact.sanitize_chart`) is a separate, non-certified step so you can see generalized text without confusing it with DP. Not an EHR. Not the paper’s MIMIC Table 2 run.
 
 ## Display redaction vs DP
 
-**Rendered text.** Substitute planted identifiers so a viewer is not looking at raw names and phones. No membership-inference bound.
+Two different leaks, two different tools.
 
-**Model path.** `PrivLLMGuard` perturbs representations and spends ε. `POST /api/run` sends the excerpt, not the full note.
+**What a person sees.** Replace planted names, MRNs, and phones in the UI. That is string substitution. It does not bound membership inference.
 
-The UI shows both so “anonymize the text” and “DP the model” stay distinct.
+**What the model sees.** `PrivLLMGuard` perturbs representations and spends ε. `POST /api/run` sends the excerpt, not the full note.
+
+The UI shows both so “hide strings on screen” and “DP the model” stay distinct.
 
 ## What you get
 
