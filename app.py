@@ -15,6 +15,6 @@ if __name__ == "__main__":
 
     host = os.environ.get("PRIVLLM_HOST", "127.0.0.1")
     port = int(os.environ.get("PRIVLLM_PORT", "8080"))
-    print(f"ChartCloak local UI -> http://{host}:{port}")
+    print(f"NoteDP local UI -> http://{host}:{port}")
     print("All charts are fictional. Do not paste real patient records.")
     uvicorn.run("src.server:app", host=host, port=port, reload=False)

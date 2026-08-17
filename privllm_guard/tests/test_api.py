@@ -8,7 +8,7 @@ client = TestClient(app)
 def test_index_serves_html():
     res = client.get("/")
     assert res.status_code == 200
-    assert b"ChartCloak" in res.content
+    assert b"NoteDP" in res.content
 
 
 def test_charts_api():

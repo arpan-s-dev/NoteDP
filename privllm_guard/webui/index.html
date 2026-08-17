@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Fictional Memorial · ChartCloak</title>
+  <title>NoteDP</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet" />
@@ -15,10 +15,10 @@
       <span class="crest" aria-hidden="true">FM</span>
       <div>
         <p class="hospital">Fictional Memorial Hospital</p>
-        <h1>Chart review · ChartCloak</h1>
+        <h1>NoteDP</h1>
       </div>
     </div>
-    <p class="mast-note">Internship demo of Alghamdi, Sci Rep 16:15781 (2026). Ten invented charts. Not an EHR. Not for real patients.</p>
+    <p class="mast-note">Internship demo of Alghamdi, Sci Rep 16:15781 (2026). Ten synthetic notes. Not an EHR. Not for real patients.</p>
     <div class="mast-flags">
       <span class="flag synth">Synthetic data only</span>
       <span class="flag local">http://127.0.0.1:8080</span>
@@ -26,21 +26,21 @@
   </header>
 
   <div class="workspace">
-    <aside class="census" aria-label="Census">
+    <aside class="census" aria-label="Records">
       <div class="census-head">
-        <h2>Census</h2>
+        <h2>Records</h2>
         <span id="count" class="pill">0</span>
       </div>
-      <p class="lede">Pick a chart. Yellow marks in the note are planted identifiers. High-risk rows are quasi-identifier examples (rare job + town + disease), not just a name.</p>
+      <p class="lede">Pick a record. Yellow marks in the note are planted identifiers. High-risk rows are quasi-identifier examples (rare job + town + disease), not just a name.</p>
       <div id="roster" class="roster"></div>
     </aside>
 
-    <section class="stage" aria-label="Chart">
+    <section class="stage" aria-label="Note">
       <div class="banner" id="banner">
         <div class="avatar" id="avatar">—</div>
         <div class="banner-copy">
           <p class="banner-kicker" id="kicker">Select a patient</p>
-          <h2 id="ptName">Census is empty until a chart is chosen</h2>
+          <h2 id="ptName">No record selected</h2>
           <p class="banner-meta" id="ptMeta"></p>
         </div>
         <dl class="banner-stats" id="ptStats"></dl>
@@ -53,19 +53,19 @@
       </div>
 
       <article class="paper" id="panel-original">
-        <p class="legend"><span class="swatch"></span> Highlighted text is a planted identifier (name, MRN, phone, date) — regex, not a certified de-identifier.</p>
+        <p class="legend"><span class="swatch"></span> Highlighted text is a planted identifier (name, MRN, phone, date). Regex, not a certified de-identifier.</p>
         <div class="note" id="note">
-          <p class="placeholder">Choose a fictional chart. Full notes live here. The tiny CPU model only reads a short excerpt.</p>
+          <p class="placeholder">Choose a synthetic note. Full text lives here. The tiny CPU model only reads a short excerpt.</p>
         </div>
       </article>
 
       <article class="paper hidden" id="panel-sanitized">
-        <p class="legend">Same note after <code>redact.sanitize_chart</code> — names and MRNs become tokens so you can see what a generalized chart looks like.</p>
+        <p class="legend">Same note after <code>redact.sanitize_chart</code>. Names and MRNs become tokens. This is display generalization, not DP.</p>
         <pre class="note serif" id="sanitized"></pre>
       </article>
 
       <article class="paper hidden" id="panel-model">
-        <p class="legend">What the toy encoder–decoder actually saw, then reconstructed with and without DP noise.</p>
+        <p class="legend">What the toy encoder-decoder actually saw, then reconstructed with and without DP noise.</p>
         <div class="split">
           <div>
             <h3>Without noise</h3>
@@ -82,7 +82,7 @@
     <aside class="console" aria-label="Privacy console">
       <h2>Privacy console</h2>
       <ol class="steps">
-        <li>Chart stays on this machine</li>
+        <li>Note stays on this machine</li>
         <li>Display redaction is regex on fake fields</li>
         <li>DP noise runs only on the short excerpt</li>
       </ol>
@@ -96,7 +96,7 @@
         <small>Paper default is 0.1. This laptop checkpoint stays readable near 1.0.</small>
       </label>
 
-      <button id="run" type="button">Run ChartCloak</button>
+      <button id="run" type="button">Run</button>
       <p class="status" id="status"></p>
       <div class="metrics" id="metrics"></div>
     </aside>

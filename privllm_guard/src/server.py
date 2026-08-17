@@ -21,7 +21,7 @@ from src.redact import find_highlights, sanitize_chart
 WEBUI = ROOT / "webui"
 ENGINE: DemoEngine | None = None
 
-app = FastAPI(title="ChartCloak local chart demo")
+app = FastAPI(title="NoteDP")
 app.mount("/static", StaticFiles(directory=WEBUI), name="static")
 
 

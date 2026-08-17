@@ -141,7 +141,7 @@ runBtn.addEventListener("click", async () => {
     showTab("model");
   } finally {
     runBtn.disabled = false;
-    runBtn.textContent = "Run ChartCloak";
+    runBtn.textContent = "Run";
   }
 });
 

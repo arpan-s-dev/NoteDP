@@ -52,8 +52,8 @@ def run_demo(note: str, epsilon: float) -> tuple:
 
 def build_demo() -> gr.Blocks:
     examples = [[c.excerpt, 1.0] for c in CHARTS]
-    with gr.Blocks(title="ChartCloak internship demo") as demo:
-        gr.Markdown("# ChartCloak\n" + PAPER)
+    with gr.Blocks(title="NoteDP") as demo:
+        gr.Markdown("# NoteDP\n" + PAPER)
         with gr.Tab("Live demo"):
             note = gr.Textbox(
                 label="Synthetic clinical note",
@@ -64,7 +64,7 @@ def build_demo() -> gr.Blocks:
                 0.01, 1.0, value=1.0, step=0.01,
                 label="Privacy budget ε (paper default is 0.1; this tiny CPU model needs larger ε to stay readable)",
             )
-            go = gr.Button("Run ChartCloak", variant="primary")
+            go = gr.Button("Run", variant="primary")
             with gr.Row():
                 original = gr.Textbox(label="Original synthetic note", lines=5)
                 nonpriv = gr.Textbox(label="Reconstruction without DP noise", lines=5)
@@ -85,8 +85,7 @@ def build_demo() -> gr.Blocks:
                 """
 ## Elevator pitch
 
-Hospitals want LLMs for summarization. Notes can identify patients. **ChartCloak**
-runs **PrivLLM-Guard**
+Hospitals want LLMs for summarization. Notes can identify patients. **PrivLLM-Guard**
 adds calibrated Gaussian noise and a tracked privacy budget so one patient’s record
 cannot change the model’s behavior much.
 
