@@ -1,6 +1,6 @@
 # NoteDP
 
-**Problem.** You cannot treat a clinical note like ordinary training text. A discharge summary, med list, or H&P is a record of one patient. If you train a language model on those notes, the model can memorize and later emit identifiers (an MRN, or a rare job + town + diagnosis). If you paste the note into a hosted LLM, you have already given that record to someone else. Either way the failure is the same: the language model is being used as if the data were anonymous. They are not.
+You cannot treat a clinical note like ordinary training text. A discharge summary, med list, or H&P is a record of one patient. If you train a language model on those notes, the model can memorize and later emit identifiers (an MRN, or a rare job + town + diagnosis). If you paste the note into a hosted LLM, you have already given that record to someone else. Either way the failure is the same: the language model is being used as if the data were anonymous. They are not.
 
 Name-stripping does not solve it. Quasi-identifiers stay in the tokens. The actual problem this project targets is: **run a language model on clinical note data without assuming the network is a safe store of patient identity.**
 
@@ -10,7 +10,7 @@ Name-stripping does not solve it. Quasi-identifiers stay in the tokens. The actu
 
 Two different leaks, two different tools.
 
-**What a person sees.** Replace planted names, MRNs, and phones in the UI. That is string substitution. It does not bound membership inference.
+**What a medical officer sees.** Replace planted names, MRNs, and phones in the UI. That is string substitution. It does not bound membership inference.
 
 **What the model sees.** `PrivLLMGuard` perturbs representations and spends ε. `POST /api/run` sends the excerpt, not the full note.
 
